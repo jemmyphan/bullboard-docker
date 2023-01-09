@@ -1,0 +1,12 @@
+{
+  "name": "bullboard-docker",
+  "version": "1.0.0",
+  "main": "index.js",
+  "author": "jemmyphan",
+  "license": "MIT",
+  "dependencies": {
+    "@bull-board/express": "^4.10.1",
+    "bullmq": "^3.5.3",
+    "express": "^4.18.2"
+  }
+}
