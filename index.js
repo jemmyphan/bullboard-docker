@@ -4,13 +4,13 @@ const {
   BullMQAdapter,
 } = require("@bull-board/express");
 const { Queue: QueueMQ, Worker, QueueScheduler } = require("bullmq");
+const Redis = require("ioredis");
 const express = require("express");
-
-const sleep = (t) => new Promise((resolve) => setTimeout(resolve, t * 1000));
 
 const host = process.env.REDIS_HOST || "localhost";
 const port = process.env.REDIS_HOST || 6379;
 const password = process.env.REDIS_PASSWORD || "";
+const bullPrefix = process.env.BULL_PREFIX || "bull";
 
 const redisOptions = {
   port,
@@ -19,68 +19,39 @@ const redisOptions = {
   tls: false,
 };
 
-const createQueueMQ = (name) => new QueueMQ(name, { connection: redisOptions });
+const redis = new Redis({
+  host,
+  port,
+  password,
+});
 
-async function setupBullMQProcessor(queueName) {
-  const queueScheduler = new QueueScheduler(queueName, {
-    connection: redisOptions,
-  });
-  await queueScheduler.waitUntilReady();
+const serverAdapter = new ExpressAdapter();
 
-  new Worker(queueName, async (job) => {
-    for (let i = 0; i <= 100; i++) {
-      await sleep(Math.random());
-      await job.updateProgress(i);
-      await job.log(`Processing job at interval ${i}`);
+const { addQueue, removeQueue, setQueues, replaceQueues } = createBullBoard({
+  queues: [],
+  serverAdapter: serverAdapter,
+});
 
-      if (Math.random() * 200 < 1) throw new Error(`Random error ${i}`);
+const app = express();
+
+const handler = serverAdapter.getRouter();
+
+app.use("/", async (...args) => {
+  const keys = await redis.keys(`${bullPrefix}:*:id`);
+  const queues = keys.reduce((prev, current) => {
+    const regExp = new RegExp(`${bullPrefix}:(.*):id`);
+    const queueName = current.replace(regExp, "$1");
+    if (queueName === "BullMQ") {
+      return prev;
     }
+    return prev.concat(
+      new BullMQAdapter(new QueueMQ(queueName, { connection: redis }))
+    );
+  }, []);
+  setQueues(queues);
+  return handler(...args);
+});
 
-    return { jobId: `This is the return value of job (${job.id})` };
-  });
-}
-
-const run = async () => {
-  const exampleBullMq = createQueueMQ("BullMQ");
-
-  await setupBullMQProcessor(exampleBullMq.name);
-
-  const app = express();
-
-  const serverAdapter = new ExpressAdapter();
-  serverAdapter.setBasePath("/ui");
-
-  createBullBoard({
-    queues: [new BullMQAdapter(exampleBullMq)],
-    serverAdapter,
-  });
-
-  app.use("/ui", serverAdapter.getRouter());
-
-  app.use("/add", (req, res) => {
-    const opts = req.query.opts || {};
-
-    if (opts.delay) {
-      opts.delay = +opts.delay * 1000; // delay must be a number
-    }
-
-    exampleBullMq.add("Add", { title: req.query.title }, opts);
-
-    res.json({
-      ok: true,
-    });
-  });
-
-  app.listen(3000, () => {
-    console.log("Running on 3000...");
-    console.log("For the UI, open http://localhost:3000/ui");
-    console.log("Make sure Redis is running on port 6379 by default");
-    console.log("To populate the queue, run:");
-    console.log("  curl http://localhost:3000/add?title=Example");
-    console.log("To populate the queue with custom options (opts), run:");
-    console.log("  curl http://localhost:3000/add?title=Test&opts[delay]=9");
-  });
-};
-
-// eslint-disable-next-line no-console
-run().catch((e) => console.error(e));
+app.listen(8787, () => {
+  console.log("Running on 8787...");
+});

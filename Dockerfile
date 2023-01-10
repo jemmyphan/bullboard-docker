@@ -2,7 +2,7 @@ FROM node:lts
 
 WORKDIR /app
 
-EXPOSE 3000 3000
+EXPOSE 8787 8787
 COPY . /app/
 
 RUN yarn install
