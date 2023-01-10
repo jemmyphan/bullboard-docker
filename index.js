@@ -8,9 +8,10 @@ const Redis = require("ioredis");
 const express = require("express");
 
 const host = process.env.REDIS_HOST || "localhost";
-const port = process.env.REDIS_HOST || 6379;
+const port = process.env.REDIS_PORT || 6379;
 const password = process.env.REDIS_PASSWORD || "";
 const bullPrefix = process.env.BULL_PREFIX || "bull";
+const bullboardPort = process.env.BULLBOARD_PORT || 8787;
 
 const redisOptions = {
   port,
@@ -52,6 +53,6 @@ app.use("/", async (...args) => {
   return handler(...args);
 });
 
-app.listen(8787, () => {
+app.listen(bullboardPort, () => {
   console.log("Running on 8787...");
 });
